@@ -1,5 +1,6 @@
 
-import wx 
+import wx
+import wx.stc
 import configparser
 import glob
 import os
@@ -46,24 +47,24 @@ class ThemeManager:
 
 
     # Get a style element string
-    def getStyle(self, selector, name):
+    def getStyle(self, selector: str, name: str, fallback=None):
         """ Returns a style string from the theme. """
 
-        # TODO: Load default base style
-        value = None
+        # Prepend style/ to the selector
+        selector = 'style/' + selector
 
-        # Get generic section color
-        v = self.config.get(section='style', option=name, fallback=None)
-        if v:
-            value = v
+        # Check each style group, getting more and more generic, until it's found
+        groups = selector.split('/')
+        for i in reversed(range(len(groups))):
 
-        # Get specific section color
-        v = self.config.get(section='style/' + selector, option=name, fallback=None)
-        if v:
-            value = v
+            # Try fetch value
+            group = '/'.join(groups[0:i+1])
+            value = self.config.get(section=group, option=name, fallback=None)
+            if value:
+                return value
 
         # Done
-        return value
+        return fallback
 
 
     # Gets a color from the theme config.
@@ -113,6 +114,22 @@ class ThemeManager:
         # Store in cache
         self.cache[cacheID] = value
         return value
+
+
+    # Applies a font style to a Scintilla control
+    def applySciStyle(self, control: wx.stc.StyledTextCtrl, selector: str, code: int):
+        """ Applies a font style to a Scintilla control. """
+
+        # Apply font
+        font = self.getFont(selector)
+        control.StyleSetFont(code, font)
+
+        # Apply colors
+        fore = self.getColor(selector, 'foreground-color')
+        back = self.getColor(selector, 'background-color')
+        control.StyleSetForeground(code, fore)
+        control.StyleSetBackground(code, back)
+
 
 
     # Returns a bitmap image for the specified named icon.

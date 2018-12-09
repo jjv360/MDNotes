@@ -33,11 +33,13 @@ class FilePanel(wx.VListBox):
         # Add new button
         newBtn = wx.StaticBitmap(self.header, bitmap=Theme.getIcon('new-file', 16), size=wx.Size(44, 44))
         newBtn.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        newBtn.Bind(wx.EVT_LEFT_DOWN, lambda e: self.createNote())
         toolbarSizer.Add(newBtn)
 
         # Add open button
         openBtn = wx.StaticBitmap(self.header, bitmap=Theme.getIcon('open-file', 16), size=wx.Size(44, 44))
         openBtn.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        openBtn.Bind(wx.EVT_LEFT_DOWN, lambda e: self.openNote())
         toolbarSizer.Add(openBtn)
 
         # Add flex space
@@ -50,6 +52,23 @@ class FilePanel(wx.VListBox):
 
         # Load history of files
         self.files = []
+        paths = Config.get('history', 'file_paths', '')
+        paths = paths.split('*')
+        for path in paths:
+
+            # Skip blanks
+            if not path:
+                continue
+
+            # Make sure file exists
+            path = os.path.abspath(path)
+            if not os.path.exists(path):
+                continue
+
+            # Add it
+            self.files.append(path)
+
+        # Update row count
         self.SetRowCount(len(self.files) + 1)
 
         # Store first line of each file
@@ -66,6 +85,14 @@ class FilePanel(wx.VListBox):
     
             # Get config folder
             self.addFile(notePath)
+
+        else:
+
+            # We have some files. Open the first one. Select row
+            self.SetSelection(0)
+
+            # Open file
+            wx.CallAfter(lambda: self.onFileOpen(self.files[0]))
 
 
     # Event: Called when the window is resized
@@ -182,5 +209,45 @@ class FilePanel(wx.VListBox):
         # Select row
         self.SetSelection(0)
 
+        # Redraw
+        self.RefreshAll()
+
         # Open file
         wx.CallAfter(lambda: self.onFileOpen(path))
+
+        # Save history
+        Config.set('history', 'file_paths', '*'.join(self.files))
+
+
+    # Creates a new note
+    def createNote(self):
+
+        # Ask the user where to save it
+        with wx.FileDialog(self, message="Create note", defaultDir=Config.path, defaultFile="Note.md", wildcard="Markdown files (*.md)|*.md", style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as dlg:
+
+            # Check if the user cancelled
+            if dlg.ShowModal() == wx.ID_CANCEL:
+                return
+
+            # Create new file
+            path = os.path.abspath(dlg.GetPath())
+            with open(path, 'w') as f:
+                f.write("")
+
+            # Add this file to our list
+            self.addFile(path)
+
+    
+    # Opens an existing markdown file
+    def openNote(self):
+
+        # Ask user to select the file
+        with wx.FileDialog(self, message="Open note", defaultDir=Config.path, wildcard="Markdown files (*.md)|*.md", style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as dlg:
+
+            # Check if the user cancelled
+            if dlg.ShowModal() == wx.ID_CANCEL:
+                return
+
+            # Add file to our list
+            path = os.path.abspath(dlg.GetPath())
+            self.addFile(path)

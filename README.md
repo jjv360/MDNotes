@@ -23,5 +23,6 @@ You can also create multiple notes, and optionally store them in different place
 - Icons made by 
 [srip](https://www.flaticon.com/authors/srip), 
 [Dave Gandy](https://www.flaticon.com/authors/dave-gandy), 
-[Gregor Cresnar](https://www.flaticon.com/authors/gregor-cresnar) 
+[Gregor Cresnar](https://www.flaticon.com/authors/gregor-cresnar),
+[Those Icons](https://www.flaticon.com/authors/those-icons)
 from [www.flaticon.com](https://www.flaticon.com/) is licensed by [CC 3.0 BY](http://creativecommons.org/licenses/by/3.0/)
