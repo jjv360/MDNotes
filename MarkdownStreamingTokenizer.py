@@ -34,49 +34,62 @@ class MarkdownTokens:
         if self.currentIndex >= len(self.content):
             raise StopIteration
 
-        # Try each regex
-        for matcher in TokenMatchers:
+        # Try each regex until we get the closest match
+        matcher = None
+        match = None
+        for m in TokenMatchers:
 
             # Get info
-            typeName = matcher['name']
-            regex = matcher['regex']
-            skip_start = matcher.get('skip_start', 0)
-            skip_end = matcher.get('skip_end', 0)
+            regex = m['regex']
 
             # Check if regex matches
-            match = regex.match(self.content, self.currentIndex)
-            if not match:
+            pmatch = regex.search(self.content, self.currentIndex)
+            if not pmatch:
                 continue
 
-            # Match was found! Create array of tokens
-            tokens = []
+            # Check if this match is closer than the previous one
+            if not match or pmatch.start() < match.start():
+                matcher = m
+                match = pmatch
 
-            # Get range of skippable chars
-            if skip_start > 0:
-                tokens.append(Token('unimportant', fromIndex=match.start(), toIndex=match.start() + skip_start))
+        # If no matches, this is the final part of the document
+        if not match:
 
-            # Add main tokens
-            tokens.append(Token(typeName, fromIndex=match.start() + skip_start, toIndex=match.end() - skip_end))
+            # Nothing found, the rest of the document is plain text
+            token = Token('plain', fromIndex=self.currentIndex, toIndex=len(self.content))
+            self.currentIndex = len(self.content)
+            return token
 
-            # Get range of skippable chars
-            if skip_end > 0:
-                tokens.append(Token('unimportant', fromIndex=match.end() - skip_end, toIndex=match.end()))
+        # Match was found! Create array of tokens
+        typeName = matcher['name']
+        skip_start = matcher.get('skip_start', 0)
+        skip_end = matcher.get('skip_end', 0)
+        tokens = []
 
-            # Update current position
-            self.currentIndex = match.end()
+        # If match was not at the start of the string, add blank token
+        if match.start() > self.currentIndex:
+            tokens.append(Token('plain', fromIndex=self.currentIndex, toIndex=match.start()))
 
-            # Add extra tokens to the queue
-            for i in range(1, len(tokens)):
-                self.tokenQueue.append(tokens[i])
+        # Get range of skippable chars
+        if skip_start > 0:
+            tokens.append(Token('unimportant', fromIndex=match.start(), toIndex=match.start() + skip_start))
 
-            # Return first token
-            return tokens[0]
+        # Add main tokens
+        tokens.append(Token(typeName, fromIndex=match.start() + skip_start, toIndex=match.end() - skip_end))
 
+        # Get range of skippable chars
+        if skip_end > 0:
+            tokens.append(Token('unimportant', fromIndex=match.end() - skip_end, toIndex=match.end()))
 
-        # Nothing found, the rest of the document is plain text
-        token = Token('plain', fromIndex=self.currentIndex, toIndex=len(self.content))
-        self.currentIndex = len(self.content)
-        return token
+        # Update current position
+        self.currentIndex = match.end()
+
+        # Add extra tokens to the queue
+        for i in range(1, len(tokens)):
+            self.tokenQueue.append(tokens[i])
+
+        # Return first token
+        return tokens[0]
 
 
 
