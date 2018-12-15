@@ -8,7 +8,9 @@ You can also create multiple notes, and optionally store them in different place
 ## Features
 
 - [x] Display and edit markdown files
-- [ ] Light and dark theme
+- [x] Light theme
+- [ ] Dark theme
+- [x] Allow selecting folders to search for Markdown files in
 - [ ] System hotkey to show / hide the app
 - [ ] Close to the system tray
 - [ ] Option to start on startup

@@ -20,6 +20,7 @@ class MainWindow(wx.Frame):
         # Create left panel
         self.filePanel = FilePanel(self.split)
         self.filePanel.onFileOpen = self.onFileOpen
+        self.filePanel.onClose = lambda: self.Close()
         
         # Create right panel
         self.editor = EditorPanel(self.split)
@@ -30,6 +31,20 @@ class MainWindow(wx.Frame):
             self.split.SplitVertically(self.filePanel, self.editor, sashPosition=320)
         else:
             self.split.Initialize(self.editor)
+
+        # Listen for events
+        self.Bind(wx.EVT_ACTIVATE, self.didActivate)
+
+
+    # Called when the window becomes active
+    def didActivate(self, e):
+
+        # Stop if deactivated
+        if not e.GetActive():
+            return
+
+        # Tell the file list to refresh
+        self.filePanel.refreshFiles()
 
 
     # Called when the user opens a file from the file list

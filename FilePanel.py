@@ -1,8 +1,10 @@
 
 import wx
 import os
+import sys
 from Theme import *
 import Config
+
 
 class FilePanel(wx.VListBox):
 
@@ -20,6 +22,7 @@ class FilePanel(wx.VListBox):
 
         # Custom events
         self.onFileOpen = None
+        self.onClose = None
 
         # Header bar panel
         self.header = wx.Panel(self)
@@ -37,44 +40,209 @@ class FilePanel(wx.VListBox):
         toolbarSizer.Add(newBtn)
 
         # Add open button
-        openBtn = wx.StaticBitmap(self.header, bitmap=Theme.getIcon('open-file', 16), size=wx.Size(44, 44))
-        openBtn.SetCursor(wx.Cursor(wx.CURSOR_HAND))
-        openBtn.Bind(wx.EVT_LEFT_DOWN, lambda e: self.openNote())
-        toolbarSizer.Add(openBtn)
+        # openBtn = wx.StaticBitmap(self.header, bitmap=Theme.getIcon('open-file', 16), size=wx.Size(44, 44))
+        # openBtn.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        # openBtn.Bind(wx.EVT_LEFT_DOWN, lambda e: self.openNote())
+        # toolbarSizer.Add(openBtn)
 
         # Add flex space
         toolbarSizer.AddStretchSpacer()
 
         # Add settings button
-        settingsBtn = wx.StaticBitmap(self.header, bitmap=Theme.getIcon('settings', 16), size=wx.Size(44, 44))
-        settingsBtn.SetCursor(wx.Cursor(wx.CURSOR_HAND))
-        toolbarSizer.Add(settingsBtn)
+        self.settingsBtn = wx.StaticBitmap(self.header, bitmap=Theme.getIcon('settings', 16), size=wx.Size(44, 44))
+        self.settingsBtn.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        self.settingsBtn.Bind(wx.EVT_LEFT_DOWN, lambda e: self.openSettings())
+        toolbarSizer.Add(self.settingsBtn)
 
-        # Load history of files
-        self.files = []
-        paths = Config.get('history', 'file_paths', '')
-        paths = paths.split('*')
-        for path in paths:
+        # Build menu
+        self.menu = self.buildMenu()
+
+        # Store first line of each file
+        self.descriptionCache = {}
+
+        # Refresh file list (in the next run loop)
+        wx.CallAfter(lambda: self.refreshFiles())
+
+
+    # Creates the settings menu
+    def buildMenu(self):
+
+        # Create menu
+        menu = wx.Menu()
+
+        # Create folder list submenu
+        smenu = self.buildFolderMenu(menu)
+        menu.AppendSubMenu(smenu, text="Folders")
+        menu.AppendSeparator()
+
+        # Create about list submenu
+        smenu = self.buildAboutMenu(menu)
+        menu.AppendSubMenu(smenu, text="About")
+
+        # Exit button
+        itm = menu.Append(-1, item="Quit")
+        menu.Bind(wx.EVT_MENU, lambda e: self.onClose(), id=itm.GetId())
+
+        # Done
+        return menu
+
+
+    # Creates the about menu
+    def buildAboutMenu(self, mainMenu):
+
+        # Create menu
+        menu = wx.Menu()
+
+        itm = menu.Append(-1, item='OS: ' + wx.GetOsDescription())
+        itm.Enable(False)
+
+        itm = menu.Append(-1, item='Python: ' + sys.version)
+        itm.Enable(False)
+
+        itm = menu.Append(-1, item='wxPython: ' + wx.version())
+        mainMenu.Bind(wx.EVT_MENU, lambda e: wx.InfoMessageBox(self), id=itm.GetId())
+
+        # Done
+        return menu
+
+
+    # Creates the search folder menu
+    def buildFolderMenu(self, mainMenu):
+
+        # Create menu
+        menu = wx.Menu()
+
+        # Add permanent config folder
+        itm = menu.Append(-1, item='Remove ' + Config.path)
+        itm.Enable(False)
+
+        # Add other folders
+        folders = Config.get(section='ui', option='folders', fallback='').split('*')
+        for path in folders:
 
             # Skip blanks
             if not path:
                 continue
 
-            # Make sure file exists
-            path = os.path.abspath(path)
-            if not os.path.exists(path):
+            # Create option to remove it
+            itm = menu.Append(-1, item='Remove ' + path)
+            mainMenu.Bind(wx.EVT_MENU, lambda e: self.removeFolder(path), id=itm.GetId())
+            
+
+        # Separator
+        menu.AppendSeparator()
+
+        # Option to add a folder
+        itm = menu.Append(-1, item='Add folder')
+        mainMenu.Bind(wx.EVT_MENU, lambda e: self.addFolder(), id=itm.GetId())
+
+        # Done
+        return menu
+
+
+
+    # Called when the user presses the settings button
+    def openSettings(self):
+
+        # Get menu position, right under the settings button
+        pos = self.settingsBtn.GetPosition()
+        pos.y += self.settingsBtn.GetSize().height
+
+        # Show menu
+        self.PopupMenu(self.menu, pos)
+
+
+    # Called to add a folder to the watch list
+    def addFolder(self):
+
+        # Ask to open a folder
+        path = wx.DirSelector(message="Select note folder", style=wx.DD_DIR_MUST_EXIST).strip()
+        if not path:
+            return
+
+        # Get absolute path
+        path = os.path.abspath(path)
+
+        # Check if it exists already
+        existingFolders = Config.get(section='ui', option='folders', fallback='').split('*')
+        if path in existingFolders:
+            return
+
+        # Add to list
+        existingFolders.append(path)
+
+        # Write to config
+        Config.set(section='ui', option='folders', value='*'.join(existingFolders))
+
+        # Rebuild menu
+        self.menu = self.buildMenu()
+
+        # TODO: Refresh file list
+        self.refreshFiles()
+
+
+    # Called to remove a folder from the watch list
+    def removeFolder(self, path):
+
+        # Confirm with the user
+        response = wx.MessageBox("Are you sure you want to remove '" + path + "' from the folder list?", caption="Remove Folder", style=wx.OK | wx.CANCEL | wx.CENTER | wx.ICON_QUESTION, parent=self)
+        if not response == wx.OK:
+            return
+
+        # Get existing items
+        existingFolders = Config.get(section='ui', option='folders', fallback='').split('*')
+
+        # Remove it
+        existingFolders.remove(path)
+
+        # Write to config
+        Config.set(section='ui', option='folders', value='*'.join(existingFolders))
+
+        # Rebuild menu
+        self.menu = self.buildMenu()
+
+        # TODO: Refresh file list
+        self.refreshFiles()
+
+
+    # Refresh the file list
+    def refreshFiles(self):
+
+        # Get list of folders
+        folders = Config.get(section='ui', option='folders', fallback='').split('*')
+
+        # Add the config folder to it
+        folders.insert(0, Config.path)
+
+        # Get currently selected file, if any
+        idx = self.GetSelection()
+        currentFile = None
+        if idx != wx.NOT_FOUND and idx-1 >= 0 and idx-1 < len(self.files):
+            currentFile = self.files[idx-1]
+
+        # Load files
+        self.files = []
+        self.descriptionCache = {}
+        for folder in folders:
+
+            # Skip blank folders
+            if not folder:
                 continue
 
-            # Add it
-            self.files.append(path)
+            # Go through contents of the folder
+            for filename in os.listdir(folder):
 
-        # Update row count
-        self.SetRowCount(len(self.files) + 1)
+                # Check if file is markdown
+                if not filename.lower().endswith('.md'):
+                    continue
 
-        # Store first line of each file
-        self.descriptionCache = {}
-        
-        # If no default files, load one
+                # Get absolute path to file
+                path = os.path.abspath(os.path.join(folder, filename))
+
+                # Add it
+                self.files.append(path)
+
+        # If there are no files, add the starter file now
         if len(self.files) == 0:
 
             # Create default note if not exists
@@ -82,17 +250,24 @@ class FilePanel(wx.VListBox):
             if not os.path.exists(notePath):
                 with open(notePath, 'w') as file:
                     file.write("# Welcome to MDNotes!\nThis area is entirely yours, go ahead and write stuff here.")
-    
-            # Get config folder
-            self.addFile(notePath)
 
-        else:
+            # Add to file list
+            self.files.append(notePath)
 
-            # We have some files. Open the first one. Select row
-            self.SetSelection(0)
+        # Update number of rows
+        self.SetRowCount(len(self.files) + 1)
 
-            # Open file
-            wx.CallAfter(lambda: self.onFileOpen(self.files[0]))
+        # If nothing is selected, or the selected file has been removed, select the first file
+        if self.GetSelection() == wx.NOT_FOUND or currentFile not in self.files:
+
+            # Select it
+            self.SetSelection(1)
+
+            # And open it
+            self.onFileOpen(self.files[0])
+
+        # Redraw UI
+        self.RefreshAll()
 
 
     # Event: Called when the window is resized
@@ -102,6 +277,7 @@ class FilePanel(wx.VListBox):
         fullSize = self.GetClientSize()
 
         # Resize the header
+        self.header.SetPosition(wx.Point(0, 0))
         self.header.SetSize(fullSize[0], 44)
 
 
@@ -189,65 +365,35 @@ class FilePanel(wx.VListBox):
         self.onFileOpen(file)
 
 
-    # Adds a file to the file list
-    def addFile(self, path):
-        
-        # Get absolute path
-        path = os.path.abspath(path)
-
-        # Make sure it doesn't exist already
-        for f in self.files:
-            if f == path:
-                return
-
-        # Insert it at the top
-        self.files.insert(0, path)
-
-        # Update row count
-        self.SetRowCount(1 + len(self.files))
-
-        # Select row
-        self.SetSelection(0)
-
-        # Redraw
-        self.RefreshAll()
-
-        # Open file
-        wx.CallAfter(lambda: self.onFileOpen(path))
-
-        # Save history
-        Config.set('history', 'file_paths', '*'.join(self.files))
-
-
     # Creates a new note
     def createNote(self):
+        
+        # TODO: Get default folder
+        folder = Config.path
 
-        # Ask the user where to save it
-        with wx.FileDialog(self, message="Create note", defaultDir=Config.path, defaultFile="Note.md", wildcard="Markdown files (*.md)|*.md", style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as dlg:
+        # Create filename
+        filename = 'Note.md'
+        index = 0
+        while os.path.exists(os.path.join(folder, filename)):
+            index += 1
+            filename = 'Note (' + str(index) + ').md'
 
-            # Check if the user cancelled
-            if dlg.ShowModal() == wx.ID_CANCEL:
-                return
+        # Create new file
+        path = os.path.join(folder, filename)
+        with open(path, 'w') as f:
+            f.write("")
 
-            # Create new file
-            path = os.path.abspath(dlg.GetPath())
-            with open(path, 'w') as f:
-                f.write("")
+        # Add to file list
+        self.files.insert(0, path)
+        self.SetRowCount(1 + len(self.files))
 
-            # Add this file to our list
-            self.addFile(path)
+        # Select it
+        self.SetSelection(1)
 
-    
-    # Opens an existing markdown file
-    def openNote(self):
+        # Refresh UI
+        self.RefreshAll()
 
-        # Ask user to select the file
-        with wx.FileDialog(self, message="Open note", defaultDir=Config.path, wildcard="Markdown files (*.md)|*.md", style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as dlg:
+        # Open it
+        self.onFileOpen(path)
 
-            # Check if the user cancelled
-            if dlg.ShowModal() == wx.ID_CANCEL:
-                return
-
-            # Add file to our list
-            path = os.path.abspath(dlg.GetPath())
-            self.addFile(path)
+        
