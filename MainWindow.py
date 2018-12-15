@@ -25,6 +25,8 @@ class MainWindow(wx.Frame):
         # Create right panel
         self.editor = EditorPanel(self.split)
         self.editor.onMenuPressed = self.onMenuPressed
+        self.editor.onFileRenamed = lambda newPath: self.filePanel.refreshFiles(then_select=newPath)
+        self.editor.onFileDeleted = lambda: self.filePanel.refreshFiles()
 
         # Set panels into split view
         if Config.getboolean('ui', 'show_file_list', False):

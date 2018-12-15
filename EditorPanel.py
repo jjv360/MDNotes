@@ -1,8 +1,10 @@
 
 import wx
 import wx.stc
+import Config
 from Theme import *
 from MarkdownStreamingTokenizer import *
+from send2trash import send2trash
 
 # Define scintilla built-in style codes TODO: Shouldn't this be defined somewhere in wx.stc?
 STYLE_DEFAULT               = 32
@@ -32,6 +34,8 @@ class EditorPanel(wx.Panel):
 
         # Events the instance owner must listen to
         self.onMenuPressed = None
+        self.onFileRenamed = None
+        self.onFileDeleted = None
 
         # Setup panel
         self.SetBackgroundColour(Theme.getColor('root/editor', 'background-color'))
@@ -58,18 +62,42 @@ class EditorPanel(wx.Panel):
 
         # Header bar panel
         header = wx.Panel(self)
-        self.GetSizer().Add(header)
+        self.GetSizer().Add(header, flag=wx.EXPAND)
        
         # Sizer for the header panel
         toolbarSizer = wx.BoxSizer()
         header.SetSizer(toolbarSizer)
         header.SetAutoLayout(True)
 
-        # Add new button
-        newBtn = wx.StaticBitmap(header, bitmap=Theme.getIcon('menu', 16), size=wx.Size(44, 44))
-        newBtn.SetCursor(wx.Cursor(wx.CURSOR_HAND))
-        newBtn.Bind(wx.EVT_LEFT_DOWN, lambda e: self.onMenuPressed())
-        toolbarSizer.Add(newBtn)
+        # Add menu button
+        menuBtn = wx.StaticBitmap(header, bitmap=Theme.getIcon('menu', 16), size=wx.Size(44, 44))
+        menuBtn.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        menuBtn.Bind(wx.EVT_LEFT_DOWN, lambda e: self.onMenuPressed())
+        toolbarSizer.Add(menuBtn)
+
+        # Add file name label
+        self.nameLbl = wx.StaticText(header, label="...")
+        self.nameLbl.SetFont(Theme.getFont('root/editor/filename'))
+        self.nameLbl.SetForegroundColour(Theme.getColor('root/editor/filename', 'foreground-color'))
+        toolbarSizer.Add(self.nameLbl, proportion=1, flag=wx.ALIGN_CENTER_VERTICAL)
+
+        # Add rename button
+        renameBtn = wx.StaticBitmap(header, bitmap=Theme.getIcon('rename', 16), size=wx.Size(44, 44))
+        renameBtn.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        renameBtn.Bind(wx.EVT_LEFT_DOWN, lambda e: self.onRenamePressed())
+        toolbarSizer.Add(renameBtn)
+
+        # Add change folder button
+        self.folderBtn = wx.StaticBitmap(header, bitmap=Theme.getIcon('folder', 16), size=wx.Size(44, 44))
+        self.folderBtn.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        self.folderBtn.Bind(wx.EVT_LEFT_DOWN, lambda e: self.onFolderPressed())
+        toolbarSizer.Add(self.folderBtn)
+
+        # Add delete button
+        deleteBtn = wx.StaticBitmap(header, bitmap=Theme.getIcon('delete', 16), size=wx.Size(44, 44))
+        deleteBtn.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        deleteBtn.Bind(wx.EVT_LEFT_DOWN, lambda e: self.onDeletePressed())
+        toolbarSizer.Add(deleteBtn)
 
 
     # Sets up the text editor component
@@ -130,6 +158,14 @@ class EditorPanel(wx.Panel):
             # Set editor content
             self.text.SetText(content)
 
+        # Remove .md extension from filename
+        filename = os.path.basename(path)
+        if filename.lower().endswith('.md'):
+            filename = filename[:-3]
+
+        # Set filename label
+        self.nameLbl.SetLabelText(filename)
+
 
     # Called when the contexts of the text area changes
     def onTextChange(self, e):
@@ -144,6 +180,10 @@ class EditorPanel(wx.Panel):
         # Stop if no active document
         if not self.currentFile:
             return
+
+        # Stop save timer
+        if self.saveTimer.IsRunning():
+            self.saveTimer.Stop()
 
         # Open the file for writing
         with open(self.currentFile, 'w') as file:
@@ -163,7 +203,6 @@ class EditorPanel(wx.Panel):
         endPos = event.GetPosition()
 
         # Style this line
-        print("Style needed from " + str(startPos) + " to " + str(endPos))
         stylePos = startPos
         self.text.StartStyling(stylePos, 31)
 
@@ -191,3 +230,124 @@ class EditorPanel(wx.Panel):
             # Apply style
             stylePos += length
             self.text.SetStyling(length, code)
+
+
+    # Called when the use presses the rename button
+    def onRenamePressed(self):
+
+        # Get current name
+        filename = os.path.basename(self.currentFile)
+
+        # Remove .md extension
+        if filename.lower().endswith('.md'):
+            filename = filename[:-3]
+
+        # Ask for new name
+        newFilename = wx.GetTextFromUser(message="Enter the new name for this note.", caption="Rename note", default_value=filename, parent=self)
+
+        # Check if cancelled or unchanged
+        if not newFilename or newFilename == filename:
+            return
+
+        # Add extension if needed
+        if not newFilename.lower().endswith('.md'):
+            newFilename += '.md'
+
+        # Get path to new file
+        oldPath = self.currentFile
+        newPath = os.path.abspath(os.path.join(oldPath, '..', newFilename))
+
+        # Save now, just in case
+        self.save()
+
+        # Move file
+        os.rename(oldPath, newPath)
+
+        # Inform file list to reload.
+        self.onFileRenamed(newPath)
+
+        # Open it again
+        self.openFile(newPath)
+
+
+    # Called when the user wants to change the folder this note is in
+    # TODO: Make folders which appear only contain the most relevate paths, ie. remove path prefixes which match all stored paths
+    def onFolderPressed(self):
+
+        # Get current folder list
+        folders = Config.get(section='ui', option='folders', fallback='').split('*')
+        folders = filter(None, folders)
+
+        # Create menu
+        menu = wx.Menu()
+
+        # Create info entry
+        itm = menu.Append(-1, item='Note location')
+        itm.Enable(False)
+
+        menu.AppendSeparator()
+
+        # Add local folder
+        itm = menu.Append(-1, item='Local', kind=wx.ITEM_CHECK)
+        menu.Bind(wx.EVT_MENU, lambda e: self.moveCurrentFileTo(Config.path), id=itm.GetId())
+        if self.currentFile.lower().startswith(Config.path.lower()):
+            itm.Check(True)
+
+        # Add other folders
+        for path in folders:
+
+            # Skip blanks
+            if not path:
+                continue
+
+            # Add menu option
+            itm = menu.Append(-1, item=path, kind=wx.ITEM_CHECK)
+            menu.Bind(wx.EVT_MENU, lambda e: self.moveCurrentFileTo(path), id=itm.GetId())
+            if self.currentFile.lower().startswith(path.lower()):
+                itm.Check(True)
+
+        # Calculate menu position (just under the folder button)
+        pos = self.folderBtn.GetPosition()
+        pos.y += self.folderBtn.GetSize().height
+
+        # Show menu
+        self.PopupMenu(menu, pos)
+
+
+    # Moves the current file to the specified folder
+    def moveCurrentFileTo(self, folder):
+
+        # Create paths
+        oldPath = self.currentFile
+        newPath = os.path.abspath(os.path.join(folder, os.path.basename(self.currentFile)))
+
+        # Save now, just in case
+        self.save()
+
+        # Move file
+        os.rename(oldPath, newPath)
+
+        # Inform file list to reload
+        self.onFileRenamed(newPath)
+
+        # Open it again
+        self.openFile(newPath)
+
+
+    # Called when the user presses the delete button
+    def onDeletePressed(self):
+
+        # Confirm with the user
+        response = wx.MessageBox("Are you sure you want to delete this note?", caption="Delete Note", style=wx.OK | wx.CANCEL | wx.CENTER | wx.ICON_QUESTION, parent=self)
+        if not response == wx.OK:
+            return
+
+        # Cancel save timer if any
+        if self.saveTimer.IsRunning():
+            self.saveTimer.Stop()
+
+        # Delete it!
+        send2trash(self.currentFile)
+
+        # Get file list to refresh and open us another file
+        self.onFileDeleted()

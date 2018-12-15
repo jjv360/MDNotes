@@ -206,7 +206,7 @@ class FilePanel(wx.VListBox):
 
 
     # Refresh the file list
-    def refreshFiles(self):
+    def refreshFiles(self, then_select=None):
 
         # Get list of folders
         folders = Config.get(section='ui', option='folders', fallback='').split('*')
@@ -257,8 +257,17 @@ class FilePanel(wx.VListBox):
         # Update number of rows
         self.SetRowCount(len(self.files) + 1)
 
+        # If we want to open a file, open it
+        if then_select:
+
+            # Find it
+            i = self.files.index(then_select)
+
+            # Select it
+            self.SetSelection(i+1)
+
         # If nothing is selected, or the selected file has been removed, select the first file
-        if self.GetSelection() == wx.NOT_FOUND or currentFile not in self.files:
+        elif self.GetSelection() == wx.NOT_FOUND or currentFile not in self.files:
 
             # Select it
             self.SetSelection(1)
