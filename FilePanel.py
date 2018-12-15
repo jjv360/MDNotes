@@ -4,6 +4,7 @@ import os
 import sys
 from Theme import *
 import Config
+import AppInfo
 
 
 class FilePanel(wx.VListBox):
@@ -70,9 +71,21 @@ class FilePanel(wx.VListBox):
         # Create menu
         menu = wx.Menu()
 
+        # Create version info entry
+        itm = menu.Append(-1, item=AppInfo.name + ' version ' + AppInfo.version)
+        itm.Enable(False)
+        menu.AppendSeparator()
+
         # Create folder list submenu
         smenu = self.buildFolderMenu(menu)
         menu.AppendSubMenu(smenu, text="Folders")
+
+        # Create close to task tray option
+        closeTrayItem = menu.Append(-1, item='Close to system tray', kind=wx.ITEM_CHECK)
+        closeTrayItem.Check(Config.getboolean('ui', 'close_to_tray'))
+        menu.Bind(wx.EVT_MENU, lambda e: self.toggleCloseToTray(closeTrayItem), id=closeTrayItem.GetId())
+
+        # Add separator
         menu.AppendSeparator()
 
         # Create about list submenu
@@ -139,6 +152,21 @@ class FilePanel(wx.VListBox):
         # Done
         return menu
 
+
+    # Called to toggle the close to tray menu option
+    def toggleCloseToTray(self, menuitem):
+
+        # Toggle current value
+        isSet = not Config.getboolean('ui', 'close_to_tray')
+
+        # Update menu
+        menuitem.Check(isSet)
+
+        # Update config
+        Config.set('ui', 'close_to_tray', 'yes' if isSet else 'no')
+
+        # Notify main window
+        self.onTrayEnable(isSet)
 
 
     # Called when the user presses the settings button

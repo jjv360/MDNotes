@@ -1,6 +1,7 @@
 
 import wx
 import os
+import Config
 from Theme import *
 from FilePanel import *
 from EditorPanel import *
@@ -21,6 +22,7 @@ class MainWindow(wx.Frame):
         self.filePanel = FilePanel(self.split)
         self.filePanel.onFileOpen = self.onFileOpen
         self.filePanel.onClose = lambda: self.Close()
+        self.filePanel.onTrayEnable = lambda enabled: self.EnableTray() if enabled else self.DisableTray()
         
         # Create right panel
         self.editor = EditorPanel(self.split)
@@ -33,6 +35,12 @@ class MainWindow(wx.Frame):
             self.split.SplitVertically(self.filePanel, self.editor, sashPosition=320)
         else:
             self.split.Initialize(self.editor)
+
+        # Enable or disable the tray
+        if Config.getboolean('ui', 'close_to_tray'):
+            self.EnableTray()
+        else:
+            self.DisableTray()
 
         # Listen for events
         self.Bind(wx.EVT_ACTIVATE, self.didActivate)
@@ -70,3 +78,13 @@ class MainWindow(wx.Frame):
 
         # Record current state
         Config.set('ui', 'show_file_list', 'yes' if self.split.IsSplit() else 'no')
+
+
+    # Enables the system tray icon
+    def EnableTray(self):
+        print('enable!')
+
+
+    # Disables the system tray icon
+    def DisableTray(self):
+        print('disable!')

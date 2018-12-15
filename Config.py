@@ -50,7 +50,7 @@ def get(section, option, fallback):
 
 
 # Get a setting
-def getboolean(section, option, fallback):
+def getboolean(section, option, fallback=False):
     return ini.getboolean(section, option, fallback=fallback)
 
 
