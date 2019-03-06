@@ -1,6 +1,6 @@
-# MDNotes
+![](https://img.shields.io/badge/status-incomplete-lightgrey.svg)
 
-(work in progress)
+# MDNotes
 
 A simple lightweight note app. On startup you have a blank text area which is saved between sessions.
 You can also create multiple notes, and optionally store them in different places as Markdown files.
