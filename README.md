@@ -20,6 +20,14 @@ You can also create multiple notes, and optionally store them in different place
   - [ ] Windows (installer)
   - [ ] Mac app
 
+## Getting Started
+
+Prequires Python 3, any version after 3.2
+
+    python install -r requirements.txt
+
+On Microsoft Windows notes and ini file location default to `%USERPROFILE%\.mdnotes`
+
 ## Attributions
 
 - Icons made by 
