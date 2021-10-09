@@ -1,0 +1,2 @@
+wxPython
+send2trash
